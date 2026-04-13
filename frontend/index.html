@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chennai Travel Safety AI</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',sans-serif;background:#0f0f1a;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+nav{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #0f3460;flex-shrink:0;z-index:1000;}
+.nav-logo{font-size:16px;font-weight:700;color:#e94560;white-space:nowrap;}
+.search-wrap{flex:1;max-width:480px;position:relative;}
+.search-wrap input{width:100%;padding:9px 40px 9px 16px;border-radius:24px;border:1px solid #333;background:#0f0f1a;color:#fff;font-size:13px;outline:none;transition:border 0.2s;}
+.search-wrap input:focus{border-color:#e94560;}
+.s-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#e94560;cursor:pointer;font-size:14px;}
+.suggestions{position:absolute;top:42px;left:0;right:0;background:#16213e;border:1px solid #333;border-radius:12px;z-index:3000;max-height:200px;overflow-y:auto;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.sug-item{padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:12px;border-bottom:1px solid #1a1a2e;}
+.sug-item:last-child{border-bottom:none;}
+.sug-item:hover{background:#1a1a2e;}
+.sug-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.nav-actions{display:flex;gap:6px;margin-left:auto;}
+.nav-btn{padding:7px 12px;background:transparent;border:1px solid #333;border-radius:20px;color:#aaa;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.2s;display:flex;align-items:center;gap:5px;}
+.nav-btn:hover,.nav-btn.on{border-color:#e94560;color:#e94560;background:rgba(233,69,96,0.08);}
+.layout{display:flex;flex:1;overflow:hidden;}
+.map-panel{flex:1;display:flex;flex-direction:column;border-right:1px solid #0f3460;position:relative;overflow:hidden;}
+.map-toolbar{background:#16213e;padding:8px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #222;flex-shrink:0;flex-wrap:wrap;}
+.tb-tab{padding:6px 12px;background:#0f0f1a;border:1px solid #333;border-radius:6px;color:#888;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all 0.2s;white-space:nowrap;}
+.tb-tab.active,.tb-tab:hover{border-color:#e94560;color:#e94560;background:rgba(233,69,96,0.08);}
+.tb-sep{width:1px;height:24px;background:#333;margin:0 4px;}
+.layer-btn{padding:5px 10px;background:#0f0f1a;border:1px solid #333;border-radius:6px;color:#888;font-size:11px;cursor:pointer;transition:all 0.2s;}
+.layer-btn.active{border-color:#7ec8e3;color:#7ec8e3;}
+.map-wrap{flex:1;position:relative;overflow:hidden;}
+#map{width:100%;height:100%;}
+.map-ctrl{position:absolute;z-index:900;}
+.zoom-btns{top:12px;right:12px;display:flex;flex-direction:column;gap:5px;}
+.ctrl-btn{width:34px;height:34px;background:#16213e;border:1px solid #333;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#aaa;font-size:12px;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.4);}
+.ctrl-btn:hover{border-color:#e94560;color:#e94560;}
+.ctrl-btn.on{border-color:#00c853;color:#00c853;}
+.float-panel{position:absolute;top:12px;left:12px;z-index:900;background:#16213e;border:1px solid #333;border-radius:12px;padding:12px;width:250px;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:none;}
+.float-panel.show{display:block;}
+.fp-title{font-size:12px;font-weight:700;color:#e94560;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.fp-close{background:none;border:none;color:#888;cursor:pointer;font-size:14px;}
+.dir-inp-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.dir-inp-row input{flex:1;padding:7px 9px;border-radius:7px;border:1px solid #333;background:#0f0f1a;color:#fff;font-size:12px;outline:none;}
+.dir-inp-row input:focus{border-color:#e94560;}
+.swap-btn{width:100%;padding:5px;background:transparent;border:1px dashed #333;border-radius:6px;color:#888;font-size:11px;cursor:pointer;margin-bottom:8px;transition:all 0.2s;}
+.swap-btn:hover{border-color:#e94560;color:#e94560;}
+.mode-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px;}
+.mode-btn{padding:6px 2px;background:#0f0f1a;border:1px solid #333;border-radius:6px;color:#888;font-size:10px;cursor:pointer;text-align:center;transition:all 0.2s;}
+.mode-btn i{display:block;font-size:12px;margin-bottom:1px;}
+.mode-btn.active{border-color:#e94560;color:#e94560;background:rgba(233,69,96,0.08);}
+.go-btn{width:100%;padding:8px;background:#e94560;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;}
+.go-btn:hover{background:#c73652;}
+.risk-warn{background:rgba(233,69,96,0.1);border:1px solid rgba(233,69,96,0.3);border-radius:6px;padding:6px 8px;font-size:10px;color:#e94560;margin-bottom:6px;display:none;}
+.route-info{margin-top:8px;background:#0f0f1a;border-radius:8px;padding:8px;display:none;}
+.route-stats{display:flex;gap:6px;margin-bottom:6px;}
+.r-stat{flex:1;text-align:center;}
+.r-stat .v{font-size:14px;font-weight:800;color:#e94560;}
+.r-stat .l{font-size:10px;color:#666;}
+.route-step{font-size:11px;color:#aaa;padding:5px 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:6px;}
+.route-step:last-child{border-bottom:none;}
+.step-ic{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.nearby-panel{max-height:400px;overflow-y:auto;}
+.nearby-panel::-webkit-scrollbar{width:3px;}
+.nearby-panel::-webkit-scrollbar-thumb{background:#333;}
+.nearby-cats{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;}
+.cat-btn{padding:4px 8px;background:#0f0f1a;border:1px solid #333;border-radius:12px;color:#888;font-size:10px;cursor:pointer;transition:all 0.2s;}
+.cat-btn.active{border-color:#e94560;color:#e94560;}
+.nearby-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:#0f0f1a;border:1px solid #222;margin-bottom:5px;cursor:pointer;transition:all 0.2s;}
+.nearby-item:hover{border-color:#e94560;}
+.nb-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.area-info-bar{position:absolute;bottom:0;left:0;right:0;z-index:900;background:#16213e;border-top:1px solid #333;padding:10px 16px;display:none;align-items:center;gap:14px;box-shadow:0 -4px 20px rgba(0,0,0,0.3);}
+.area-info-bar.show{display:flex;}
+.legend{position:absolute;bottom:60px;right:12px;z-index:900;background:#16213e;border:1px solid #333;border-radius:10px;padding:10px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.3);}
+.leg-title{font-size:10px;font-weight:700;color:#666;letter-spacing:1px;text-transform:uppercase;margin-bottom:7px;}
+.leg-row{display:flex;align-items:center;gap:7px;font-size:11px;color:#aaa;margin-bottom:4px;}
+.leg-row:last-child{margin-bottom:0;}
+.leg-dot{width:10px;height:10px;border-radius:50%;}
+.measure-bar{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:900;background:#16213e;border:1px solid #e94560;border-radius:8px;padding:7px 14px;font-size:12px;display:none;white-space:nowrap;}
+.coords-bar{position:absolute;bottom:0;right:0;z-index:900;background:rgba(22,33,62,0.85);border-top-left-radius:8px;padding:4px 10px;font-size:10px;color:#666;}
+/* CHAT */
+.chat-panel{width:360px;flex-shrink:0;background:#16213e;display:flex;flex-direction:column;overflow:hidden;}
+.chat-header{padding:14px 16px;border-bottom:1px solid #222;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.chat-header-icon{width:36px;height:36px;background:rgba(233,69,96,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.chat-header h3{font-size:14px;font-weight:700;}
+.chat-header p{font-size:11px;color:#666;margin-top:1px;}
+.online-dot{width:8px;height:8px;border-radius:50%;background:#00c853;margin-left:auto;flex-shrink:0;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.chat-messages::-webkit-scrollbar{width:3px;}
+.chat-messages::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.msg-ai{align-self:flex-start;background:#1a1a2e;border:1px solid #333;padding:10px 14px;border-radius:14px 14px 14px 4px;max-width:88%;font-size:13px;color:#ddd;line-height:1.5;}
+.msg-user{align-self:flex-end;background:#e94560;padding:10px 14px;border-radius:14px 14px 4px 14px;max-width:88%;font-size:13px;color:#fff;line-height:1.5;}
+.msg-time{font-size:10px;color:rgba(255,255,255,0.5);margin-top:4px;text-align:right;}
+.quick-qs{padding:10px 14px;border-top:1px solid #1a1a2e;flex-shrink:0;}
+.quick-qs p{font-size:10px;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+.quick-btns{display:flex;gap:5px;flex-wrap:wrap;}
+.quick-btn{padding:5px 10px;background:#0f0f1a;border:1px solid #333;border-radius:12px;color:#aaa;font-size:10px;cursor:pointer;transition:all 0.2s;}
+.quick-btn:hover{border-color:#e94560;color:#e94560;}
+.chat-input-area{padding:12px 14px;border-top:1px solid #222;display:flex;gap:8px;flex-shrink:0;background:#16213e;}
+.chat-input-area input{flex:1;padding:10px 14px;border-radius:24px;border:1px solid #333;background:#0f0f1a;color:#fff;font-size:13px;outline:none;transition:border 0.2s;}
+.chat-input-area input:focus{border-color:#e94560;}
+.send-btn{width:40px;height:40px;background:#e94560;border:none;border-radius:50%;color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.2s;}
+.send-btn:hover{background:#c73652;transform:scale(1.05);}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:none;align-items:center;justify-content:center;}
+.modal-bg.show{display:flex;}
+.modal{background:#16213e;border:1px solid #333;border-radius:16px;padding:22px;width:300px;}
+.modal h3{font-size:14px;font-weight:700;margin-bottom:12px;}
+.modal-close{float:right;background:none;border:none;color:#888;cursor:pointer;font-size:16px;}
+.share-row{display:flex;gap:8px;margin-bottom:12px;}
+.share-row input{flex:1;padding:8px;border-radius:7px;border:1px solid #333;background:#0f0f1a;color:#aaa;font-size:11px;}
+.share-row button{padding:8px 12px;background:#e94560;color:#fff;border:none;border-radius:7px;font-size:11px;cursor:pointer;}
+.share-opts{display:flex;gap:8px;justify-content:center;}
+.share-opt{width:44px;height:44px;border-radius:50%;border:1px solid #333;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;transition:all 0.2s;}
+.share-opt:hover{border-color:#e94560;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:9px 18px;border-radius:20px;font-size:12px;font-weight:600;z-index:9998;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;}
+@media(max-width:900px){.chat-panel{width:100%;position:absolute;bottom:0;left:0;right:0;height:45%;z-index:800;}.map-panel{height:55%;}.layout{flex-direction:column;}.nav-actions{display:none;}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">🛡️ Chennai Travel Safety AI</div>
+  <div class="search-wrap">
+    <input id="main-search" placeholder="Search any Chennai area..." oninput="showSug()" onkeypress="if(event.key==='Enter'){hideSug();doSearch();}"/>
+    <i class="fas fa-search s-icon" onclick="doSearch()"></i>
+    <div class="suggestions" id="sug-box"></div>
+  </div>
+  <div class="nav-actions">
+    <button class="nav-btn" onclick="toggleHeat(this)"><i class="fas fa-fire"></i> Heatmap</button>
+    <button class="nav-btn" onclick="startMeasure(this)" id="measure-btn"><i class="fas fa-ruler"></i> Measure</button>
+    <button class="nav-btn" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    <button class="nav-btn" onclick="openShare()"><i class="fas fa-share-alt"></i> Share</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <div class="map-panel">
+    <div class="map-toolbar">
+      <div class="tb-tab active" id="tb-explore" onclick="setTool('explore',this)"><i class="fas fa-map-marker-alt"></i> Explore</div>
+      <div class="tb-tab" id="tb-directions" onclick="setTool('directions',this)"><i class="fas fa-route"></i> Directions</div>
+      <div class="tb-tab" id="tb-nearby" onclick="setTool('nearby',this)"><i class="fas fa-compass"></i> Nearby</div>
+      <div class="tb-sep"></div>
+      <div class="layer-btn active" onclick="setLayer('standard',this)">🗺️ Map</div>
+      <div class="layer-btn" onclick="setLayer('satellite',this)">🛰️ Satellite</div>
+      <div class="layer-btn" onclick="setLayer('dark',this)">🌙 Dark</div>
+      <div class="layer-btn" onclick="setLayer('terrain',this)">⛰️ Terrain</div>
+    </div>
+
+    <div class="map-wrap">
+      <div id="map"></div>
+
+      <!-- DIRECTIONS PANEL -->
+      <div class="float-panel" id="dir-panel">
+        <div class="fp-title"><span><i class="fas fa-route"></i> Directions</span><button class="fp-close" onclick="setTool('explore',document.getElementById('tb-explore'))">✕</button></div>
+        <div class="dir-inp-row"><div style="width:8px;height:8px;border-radius:50%;background:#00c853;flex-shrink:0;"></div><input id="from-inp" placeholder="From (e.g. Adyar)"/></div>
+        <button class="swap-btn" onclick="swapLocs()">⇅ Swap locations</button>
+        <div class="dir-inp-row"><div style="width:8px;height:8px;border-radius:50%;background:#e94560;flex-shrink:0;"></div><input id="to-inp" placeholder="To (e.g. Egmore)"/></div>
+        <div class="mode-grid">
+          <div class="mode-btn active" onclick="setMode('driving',this)"><i class="fas fa-car"></i>Drive</div>
+          <div class="mode-btn" onclick="setMode('transit',this)"><i class="fas fa-bus"></i>Bus</div>
+          <div class="mode-btn" onclick="setMode('walking',this)"><i class="fas fa-walking"></i>Walk</div>
+          <div class="mode-btn" onclick="setMode('bicycling',this)"><i class="fas fa-bicycle"></i>Cycle</div>
+          <div class="mode-btn" onclick="setMode('motorcycle',this)"><i class="fas fa-motorcycle"></i>Bike</div>
+        </div>
+        <div class="risk-warn" id="risk-warn"><i class="fas fa-exclamation-triangle"></i> Route passes through high risk zone!</div>
+        <button class="go-btn" onclick="getRoute()"><i class="fas fa-directions"></i> Get Directions</button>
+        <div class="route-info" id="route-info">
+          <div class="route-stats">
+            <div class="r-stat"><div class="v" id="r-dist">—</div><div class="l">Distance</div></div>
+            <div class="r-stat"><div class="v" id="r-time">—</div><div class="l">Time</div></div>
+            <div class="r-stat"><div class="v" id="r-safe">—</div><div class="l">Safety</div></div>
+          </div>
+          <div id="route-steps"></div>
+          <button onclick="clearRoute()" style="width:100%;padding:6px;margin-top:6px;background:transparent;border:1px solid #333;border-radius:6px;color:#888;font-size:11px;cursor:pointer;">Clear Route</button>
+        </div>
+      </div>
+
+      <!-- NEARBY PANEL -->
+      <div class="float-panel nearby-panel" id="nearby-panel">
+        <div class="fp-title"><span><i class="fas fa-compass"></i> Nearby Places</span><button class="fp-close" onclick="setTool('explore',document.getElementById('tb-explore'))">✕</button></div>
+        <div class="nearby-cats">
+          <div class="cat-btn active" onclick="filterNearby('all',this)">All</div>
+          <div class="cat-btn" onclick="filterNearby('hospital',this)">🏥 Hospital</div>
+          <div class="cat-btn" onclick="filterNearby('police',this)">👮 Police</div>
+          <div class="cat-btn" onclick="filterNearby('metro',this)">🚇 Metro</div>
+          <div class="cat-btn" onclick="filterNearby('restaurant',this)">🍽️ Food</div>
+          <div class="cat-btn" onclick="filterNearby('hotel',this)">🏨 Hotel</div>
+          <div class="cat-btn" onclick="filterNearby('atm',this)">🏧 ATM</div>
+          <div class="cat-btn" onclick="filterNearby('pharmacy',this)">💊 Pharmacy</div>
+        </div>
+        <div id="nearby-list"></div>
+      </div>
+
+      <!-- ZOOM CONTROLS -->
+      <div class="map-ctrl zoom-btns">
+        <div class="ctrl-btn" onclick="map.zoomIn()"><i class="fas fa-plus"></i></div>
+        <div class="ctrl-btn" onclick="map.zoomOut()"><i class="fas fa-minus"></i></div>
+        <div class="ctrl-btn" onclick="centerMap()" title="Center Chennai"><i class="fas fa-compress-arrows-alt"></i></div>
+        <div class="ctrl-btn" onclick="getMyLoc()" title="My Location"><i class="fas fa-location-arrow"></i></div>
+        <div class="ctrl-btn" onclick="toggleZones(this)" title="Toggle Zones"><i class="fas fa-layer-group"></i></div>
+        <div class="ctrl-btn" onclick="toggleBoundary(this)" title="Boundary"><i class="fas fa-draw-polygon"></i></div>
+        <div class="ctrl-btn" onclick="fitAll()" title="Fit All"><i class="fas fa-expand"></i></div>
+        <div class="ctrl-btn" onclick="openStreetView()" title="Street View"><i class="fas fa-street-view"></i></div>
+      </div>
+
+      <!-- LEGEND -->
+      <div class="legend">
+        <div class="leg-title">Safety Zones</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#00c853"></div>Safe (70–100)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff9800"></div>Moderate (40–69)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#e94560"></div>High Risk (0–39)</div>
+        <div class="leg-row" style="margin-top:6px;padding-top:5px;border-top:1px solid #333;"><div style="width:18px;height:0;border-top:2px dashed #e94560;margin-right:1px;"></div>City Boundary</div>
+      </div>
+
+      <div class="measure-bar" id="measure-bar"></div>
+      <div class="coords-bar" id="coords-bar">13.0627°N 80.2100°E · Zoom 11</div>
+
+      <!-- AREA INFO BAR -->
+      <div class="area-info-bar" id="area-info-bar">
+        <div><div style="font-size:14px;font-weight:700;" id="aib-name"></div><div style="font-size:11px;color:#888;" id="aib-zone"></div></div>
+        <div style="font-size:24px;font-weight:800;" id="aib-score"></div>
+        <div><div style="font-size:12px;font-weight:600;" id="aib-label"></div><div style="height:5px;background:#333;border-radius:3px;width:100px;overflow:hidden;margin-top:4px;"><div style="height:100%;border-radius:3px;transition:width 1s;" id="aib-bar"></div></div></div>
+        <div style="display:flex;gap:6px;margin-left:auto;">
+          <button onclick="openDirectionsTo()" style="padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#e94560;color:#fff;border:none;"><i class="fas fa-directions"></i> Directions</button>
+          <button onclick="askAIAboutZone()" style="padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#0f3460;color:#7ec8e3;border:1px solid #0f3460;"><i class="fas fa-robot"></i> Ask AI</button>
+          <button onclick="saveCurrentZone()" style="padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;background:transparent;color:#888;border:1px solid #333;"><i class="fas fa-bookmark"></i></button>
+          <button onclick="document.getElementById('area-info-bar').classList.remove('show')" style="padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;background:transparent;color:#888;border:1px solid #333;">✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT CHAT PANEL -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-header-icon">🤖</div>
+      <div><h3>AI Travel Assistant</h3><p>Powered by LLaMA 3.3 via Groq</p></div>
+      <div class="online-dot" title="Online"></div>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="msg-ai">👋 Hi! I'm your Chennai travel safety assistant.<br><br>Ask me about safe areas, travel tips, or click any zone on the map and I'll tell you more about it!</div>
+    </div>
+    <div class="quick-qs">
+      <p>Quick Questions</p>
+      <div class="quick-btns">
+        <div class="quick-btn" onclick="askQuick('Is Adyar safe at night?')">Adyar night safety?</div>
+        <div class="quick-btn" onclick="askQuick('Which areas in Chennai are safest for tourists?')">Safest for tourists?</div>
+        <div class="quick-btn" onclick="askQuick('What areas to avoid in North Chennai?')">Avoid in North Chennai?</div>
+        <div class="quick-btn" onclick="askQuick('Best time to travel in Chennai?')">Best travel time?</div>
+        <div class="quick-btn" onclick="askQuick('Emergency contacts in Chennai?')">Emergency contacts?</div>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input id="chat-inp" type="text" placeholder="Ask about Chennai safety..." onkeypress="if(event.key==='Enter') sendChat()"/>
+      <button class="send-btn" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="share-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeShare()">✕</button>
+    <h3>Share Chennai Safety Map</h3>
+    <div class="share-row"><input id="share-url" value="https://chennai-safety.app" readonly/><button onclick="copyLink()">Copy</button></div>
+    <div class="share-opts">
+      <div class="share-opt" onclick="showToast('Shared to WhatsApp!')">📱</div>
+      <div class="share-opt" onclick="showToast('Shared!')">🐦</div>
+      <div class="share-opt" onclick="copyLink()">🔗</div>
+      <div class="share-opt" onclick="showToast('Email opened!')">📧</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const ZONES=[
+  {name:"Adyar",zone:"South Chennai",lat:13.0012,lng:80.2565,crime:2,safety:"green",score:86,r:4000},
+  {name:"Velachery",zone:"South Chennai",lat:12.9815,lng:80.218,crime:2,safety:"green",score:86,r:4000},
+  {name:"Sholinganallur",zone:"South Chennai",lat:12.901,lng:80.2279,crime:2,safety:"green",score:86,r:4500},
+  {name:"Besant Nagar",zone:"South Chennai",lat:13.0002,lng:80.2707,crime:2,safety:"green",score:86,r:3000},
+  {name:"Mylapore",zone:"East Chennai",lat:13.0368,lng:80.2676,crime:4,safety:"green",score:82,r:3500},
+  {name:"T Nagar",zone:"Central Chennai",lat:13.0418,lng:80.2341,crime:4,safety:"green",score:82,r:3500},
+  {name:"Anna Nagar",zone:"West Chennai",lat:13.0891,lng:80.2094,crime:4,safety:"green",score:82,r:4000},
+  {name:"Perungudi",zone:"South Chennai",lat:12.96,lng:80.245,crime:4,safety:"green",score:82,r:3500},
+  {name:"Egmore",zone:"Central Chennai",lat:13.078,lng:80.262,crime:5,safety:"orange",score:50,r:3500},
+  {name:"Royapettah",zone:"Central Chennai",lat:13.05,lng:80.26,crime:5,safety:"orange",score:50,r:3000},
+  {name:"Park Town",zone:"Central Chennai",lat:13.085,lng:80.275,crime:5,safety:"orange",score:50,r:3000},
+  {name:"Ambattur",zone:"West Chennai",lat:13.11,lng:80.15,crime:6,safety:"orange",score:48,r:4500},
+  {name:"Avadi",zone:"West Chennai",lat:13.115,lng:80.09,crime:6,safety:"orange",score:48,r:4500},
+  {name:"Porur",zone:"West Chennai",lat:13.035,lng:80.16,crime:6,safety:"orange",score:48,r:4000},
+  {name:"Tambaram",zone:"South Chennai",lat:12.9249,lng:80.1,crime:6,safety:"orange",score:48,r:4500},
+  {name:"Chromepet",zone:"South Chennai",lat:12.9516,lng:80.1462,crime:6,safety:"orange",score:48,r:3500},
+  {name:"Perambur",zone:"North Chennai",lat:13.12,lng:80.24,crime:6,safety:"orange",score:48,r:3500},
+  {name:"Manali",zone:"North Chennai",lat:13.17,lng:80.25,crime:8,safety:"red",score:14,r:4000},
+  {name:"Tiruvottiyur",zone:"North Chennai",lat:13.16,lng:80.3,crime:8,safety:"red",score:14,r:4000},
+  {name:"Madhavaram",zone:"North Chennai",lat:13.14,lng:80.23,crime:8,safety:"red",score:14,r:4000},
+  {name:"Nungambakkam", zone:"Central Chennai", lat:13.0589, lng:80.2439, crime:2, safety:"green", score:88, r:3500},
+  {name:"Alwarpet", zone:"Central Chennai", lat:13.0333, lng:80.2500, crime:2, safety:"green", score:87, r:3000},
+  {name:"Kotturpuram", zone:"South Chennai", lat:13.0180, lng:80.2410, crime:2, safety:"green", score:85, r:3500},
+  {name:"Thiruvanmiyur", zone:"South Chennai", lat:12.9830, lng:80.2630, crime:3, safety:"green", score:84, r:4000},
+  {name:"Saidapet", zone:"Central Chennai", lat:13.0200, lng:80.2200, crime:5, safety:"orange", score:55, r:3500},
+  {name:"Kodambakkam", zone:"Central Chennai", lat:13.0480, lng:80.2210, crime:4, safety:"green", score:78, r:3500},
+  {name:"Virugambakkam", zone:"West Chennai", lat:13.0500, lng:80.1900, crime:4, safety:"green", score:76, r:3800},
+  {name:"Madipakkam", zone:"South Chennai", lat:12.9647, lng:80.1961, crime:5, safety:"orange", score:52, r:4000},
+  {name:"Pallavaram", zone:"South Chennai", lat:12.9675, lng:80.1491, crime:6, safety:"orange", score:48, r:4200},
+  {name:"Poonamallee", zone:"West Chennai", lat:13.0500, lng:80.1100, crime:7, safety:"orange", score:40, r:4500},
+  {name:"Sowcarpet", zone:"North Chennai", lat:13.0900, lng:80.2800, crime:6, safety:"orange", score:45, r:2500},
+  {name:"Washermanpet", zone:"North Chennai", lat:13.1100, lng:80.2800, crime:8, safety:"red", score:18, r:3500},
+  {name:"Royapuram", zone:"North Chennai", lat:13.1140, lng:80.2940, crime:8, safety:"red", score:15, r:3000},
+  {name:"Ennore", zone:"North Chennai", lat:13.2160, lng:80.3200, crime:9, safety:"red", score:10, r:5000},
+  {name:"Medavakkam", zone:"South Chennai", lat:12.9200, lng:80.1900, crime:4, safety:"green", score:80, r:4500},
+  {name:"Kilpauk", zone:"Central Chennai", lat:13.0830, lng:80.2430, crime:3, safety:"green", score:83, r:3500}
+];
+
+const NEARBY=[
+  {type:'hospital',name:'Apollo Hospital',area:'Greams Road',lat:13.0569,lng:80.2521,icon:'🏥',rating:'4.5'},
+  {type:'hospital',name:'MIOT International',area:'Manapakkam',lat:13.0107,lng:80.1759,icon:'🏥',rating:'4.3'},
+  {type:'hospital',name:'Fortis Malar',area:'Adyar',lat:13.0007,lng:80.2541,icon:'🏥',rating:'4.4'},
+  {type:'police',name:'Adyar Police Station',area:'Adyar',lat:13.0034,lng:80.2571,icon:'👮',rating:'3.8'},
+  {type:'police',name:'Egmore Police Station',area:'Egmore',lat:13.08,lng:80.26,icon:'👮',rating:'3.9'},
+  {type:'metro',name:'Chennai Central Metro',area:'Park Town',lat:13.0827,lng:80.2785,icon:'🚇',rating:'4.5'},
+  {type:'metro',name:'Koyambedu Metro',area:'Koyambedu',lat:13.0694,lng:80.1948,icon:'🚇',rating:'4.4'},
+  {type:'metro',name:'Guindy Metro',area:'Guindy',lat:13.0067,lng:80.2206,icon:'🚇',rating:'4.3'},
+  {type:'restaurant',name:'Saravana Bhavan',area:'T Nagar',lat:13.0418,lng:80.2341,icon:'🍽️',rating:'4.3'},
+  {type:'restaurant',name:'Murugan Idli Shop',area:'Besant Nagar',lat:13.0002,lng:80.2707,icon:'🍽️',rating:'4.5'},
+  {type:'hotel',name:'ITC Grand Chola',area:'Guindy',lat:13.0067,lng:80.2,icon:'🏨',rating:'4.8'},
+  {type:'hotel',name:'The Leela Palace',area:'Adyar',lat:12.998,lng:80.252,icon:'🏨',rating:'4.7'},
+  {type:'atm',name:'SBI ATM',area:'T Nagar',lat:13.042,lng:80.2345,icon:'🏧',rating:'3.5'},
+  {type:'pharmacy',name:'Apollo Pharmacy',area:'Adyar',lat:13.0015,lng:80.2568,icon:'💊',rating:'4.2'},
+];
+
+const COL={green:'#00c853',orange:'#ff9800',red:'#e94560'};
+const LBL={green:'✅ Safe Area',orange:'⚠️ Moderate Risk',red:'🔴 High Risk'};
+let map,tileLayer,circles=[],boundary,routeLayer,myMark,measuring=false,mPoints=[],mLine=null,currentMode='driving',currentZone=null,zonesOn=true,boundOn=true;
+
+const TILES={standard:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',satellite:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',dark:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',terrain:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'};
+map=L.map('map',{zoomControl:false,attributionControl:false}).setView([13.0627,80.21],11);
+tileLayer=L.tileLayer(TILES.standard,{maxZoom:19}).addTo(map);
+const bPts=[[13.23,80.1],[13.24,80.15],[13.22,80.2],[13.18,80.25],[13.15,80.28],[13.12,80.28],[13.08,80.28],[13.04,80.28],[13.0,80.27],[12.95,80.26],[12.9,80.24],[12.87,80.2],[12.87,80.15],[12.9,80.1],[12.95,80.07],[13.0,80.05],[13.05,80.04],[13.1,80.05],[13.15,80.06],[13.2,80.08],[13.23,80.1]];
+boundary=L.polyline(bPts,{color:'#e94560',weight:2,dashArray:'6,4',opacity:0.7}).addTo(map).bindPopup('<b>Chennai City Boundary</b>');
+ZONES.forEach(z=>{const c=L.circle([z.lat,z.lng],{color:COL[z.safety],fillColor:COL[z.safety],fillOpacity:0.25,radius:z.r,weight:1.5}).addTo(map);c.bindPopup(mkPop(z));c.on('click',()=>showZone(z));circles.push(c);});
+
+function mkPop(z){const col=COL[z.safety];return `<div style="font-family:'Inter',sans-serif;min-width:170px;padding:2px;"><b style="font-size:14px;">${z.name}</b><div style="font-size:11px;color:#888;margin:2px 0 8px;">${z.zone}</div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:36px;height:36px;border-radius:8px;background:${col}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${col};">${z.score}</div><div><div style="font-size:12px;font-weight:700;color:${col};">${LBL[z.safety]}</div><div style="font-size:10px;color:#888;">Crime: ${z.crime}/10</div></div></div><div style="display:flex;gap:5px;"><button onclick="document.getElementById('to-inp').value='${z.name}';setTool('directions',document.getElementById('tb-directions'))" style="flex:1;padding:5px;background:${col};color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;">Directions</button><button onclick="askAIZone('${z.name}')" style="flex:1;padding:5px;background:#0f3460;color:#7ec8e3;border:none;border-radius:5px;font-size:11px;cursor:pointer;">Ask AI</button></div></div>`;}
+
+function showZone(z){currentZone=z;const col=COL[z.safety];document.getElementById('aib-name').textContent=z.name;document.getElementById('aib-zone').textContent=z.zone;document.getElementById('aib-score').textContent=z.score;document.getElementById('aib-score').style.color=col;document.getElementById('aib-label').textContent=LBL[z.safety];document.getElementById('aib-label').style.color=col;document.getElementById('aib-bar').style.width=z.score+'%';document.getElementById('aib-bar').style.background=col;document.getElementById('area-info-bar').classList.add('show');map.setView([z.lat,z.lng],13);}
+function showSug(){const q=document.getElementById('main-search').value.toLowerCase();const box=document.getElementById('sug-box');if(!q){box.style.display='none';return;}const m=ZONES.filter(z=>z.name.toLowerCase().includes(q)||z.zone.toLowerCase().includes(q));if(!m.length){box.style.display='none';return;}box.innerHTML=m.slice(0,6).map(z=>`<div class="sug-item" onclick="pickSug('${z.name}')"><div class="sug-dot" style="background:${COL[z.safety]}"></div><div><div style="font-weight:600;">${z.name}</div><div style="font-size:10px;color:#888;">${z.zone} · ${z.score}/100</div></div></div>`).join('');box.style.display='block';}
+function pickSug(name){document.getElementById('main-search').value=name;hideSug();const z=ZONES.find(z=>z.name===name);if(z)showZone(z);}
+function hideSug(){document.getElementById('sug-box').style.display='none';}
+function doSearch(){hideSug();const q=document.getElementById('main-search').value.toLowerCase();const z=ZONES.find(z=>z.name.toLowerCase().includes(q)||z.zone.toLowerCase().includes(q));z?showZone(z):showToast('Area not found. Try: Adyar, Egmore, Manali');}
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))hideSug();});
+function setTool(tool,btn){document.querySelectorAll('.tb-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');document.getElementById('dir-panel').classList.toggle('show',tool==='directions');document.getElementById('nearby-panel').classList.toggle('show',tool==='nearby');if(tool==='nearby')renderNearby('all');}
+function setLayer(type,btn){document.querySelectorAll('.layer-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');map.removeLayer(tileLayer);tileLayer=L.tileLayer(TILES[type],{maxZoom:19}).addTo(map);tileLayer.bringToBack();}
+function centerMap(){map.setView([13.0627,80.21],11);}
+function fitAll(){map.fitBounds(ZONES.map(z=>[z.lat,z.lng]),{padding:[40,40]});}
+function toggleZones(btn){zonesOn=!zonesOn;circles.forEach(c=>zonesOn?map.addLayer(c):map.removeLayer(c));btn.classList.toggle('on',zonesOn);showToast(zonesOn?'Zones visible':'Zones hidden');}
+function toggleBoundary(btn){boundOn=!boundOn;boundOn?map.addLayer(boundary):map.removeLayer(boundary);btn.classList.toggle('on',boundOn);showToast(boundOn?'Boundary visible':'Boundary hidden');}
+function getMyLoc(){if(!navigator.geolocation){showToast('Not supported');return;}showToast('Getting location...');navigator.geolocation.getCurrentPosition(p=>{const{latitude:la,longitude:lo}=p.coords;if(myMark)map.removeLayer(myMark);myMark=L.circleMarker([la,lo],{radius:8,color:'#4285f4',fillColor:'#4285f4',fillOpacity:1,weight:3}).addTo(map).bindPopup('<b>You are here</b>').openPopup();L.circle([la,lo],{radius:150,color:'#4285f4',fillColor:'#4285f4',fillOpacity:0.1,weight:1}).addTo(map);map.setView([la,lo],14);showToast('Location found!');},()=>showToast('Could not get location'));}
+function openStreetView(){const c=map.getCenter();window.open(`https://www.google.com/maps?q=&layer=c&cbll=${c.lat},${c.lng}`,'_blank');}
+function toggleHeat(btn){btn.classList.toggle('on');if(btn.classList.contains('on')){ZONES.filter(z=>z.safety==='red').forEach(z=>{L.circle([z.lat,z.lng],{color:'transparent',fillColor:'#e94560',fillOpacity:0.12,radius:z.r*1.8,weight:0}).addTo(map);});showToast('Heatmap ON');}else showToast('Reload to remove heatmap');}
+function startMeasure(btn){measuring=!measuring;btn.classList.toggle('on',measuring);if(measuring){mPoints=[];if(mLine)map.removeLayer(mLine);showToast('Click 2 points to measure');map.on('click',onMeasure);}else{map.off('click',onMeasure);if(mLine)map.removeLayer(mLine);document.getElementById('measure-bar').style.display='none';showToast('Measure off');}}
+function onMeasure(e){mPoints.push([e.latlng.lat,e.latlng.lng]);if(mPoints.length===2){if(mLine)map.removeLayer(mLine);mLine=L.polyline(mPoints,{color:'#fff',weight:2,dashArray:'4,4'}).addTo(map);const d=distKm(...mPoints[0],...mPoints[1]);const el=document.getElementById('measure-bar');el.textContent=`Distance: ${d.toFixed(2)} km`;el.style.display='block';mPoints=[];}}
+function setMode(mode,btn){currentMode=mode;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function swapLocs(){const f=document.getElementById('from-inp').value;document.getElementById('from-inp').value=document.getElementById('to-inp').value;document.getElementById('to-inp').value=f;}
+function getRoute(){const f=document.getElementById('from-inp').value.toLowerCase();const t=document.getElementById('to-inp').value.toLowerCase();if(!f||!t){showToast('Enter From and To');return;}const fz=ZONES.find(z=>z.name.toLowerCase().includes(f));const tz=ZONES.find(z=>z.name.toLowerCase().includes(t));if(!fz){showToast('From not found');return;}if(!tz){showToast('To not found');return;}if(routeLayer)map.removeLayer(routeLayer);const spd={driving:35,transit:22,walking:5,bicycling:13,motorcycle:40};const ico={driving:'🚗',transit:'🚌',walking:'🚶',bicycling:'🚲',motorcycle:'🏍️'};const mcol={driving:'#e94560',transit:'#00b4d8',walking:'#00c853',bicycling:'#ff9800',motorcycle:'#9c27b0'};const col=mcol[currentMode];routeLayer=L.polyline([[fz.lat,fz.lng],[tz.lat,tz.lng]],{color:col,weight:5,dashArray:currentMode==='walking'?'8,8':null,opacity:0.85}).addTo(map);map.fitBounds(routeLayer.getBounds(),{padding:[60,60]});const d=distKm(fz.lat,fz.lng,tz.lat,tz.lng);const mins=Math.round((d/spd[currentMode])*60);const avg=Math.round((fz.score+tz.score)/2);const sc=avg>70?'#00c853':avg>40?'#ff9800':'#e94560';document.getElementById('risk-warn').style.display=(fz.safety==='red'||tz.safety==='red')?'block':'none';document.getElementById('r-dist').textContent=d.toFixed(1)+' km';document.getElementById('r-time').textContent=mins<60?mins+' min':Math.floor(mins/60)+'h '+(mins%60)+'m';document.getElementById('r-safe').innerHTML=`<span style="color:${sc}">${avg}</span>`;document.getElementById('route-steps').innerHTML=`<div class="route-step"><div class="step-ic" style="background:#00c85322;color:#00c853">A</div><b>${fz.name}</b> · ${fz.score}/100</div><div class="route-step"><div class="step-ic" style="background:${col}22;color:${col}">${ico[currentMode]}</div>${d.toFixed(1)} km · ~${mins} min</div><div class="route-step"><div class="step-ic" style="background:#e9456022;color:#e94560">B</div><b>${tz.name}</b> · ${tz.score}/100</div>`;document.getElementById('route-info').style.display='block';L.marker([fz.lat,fz.lng]).addTo(map).bindPopup(`<b>Start: ${fz.name}</b>`).openPopup();L.marker([tz.lat,tz.lng]).addTo(map).bindPopup(`<b>End: ${tz.name}</b>`);}
+function clearRoute(){if(routeLayer)map.removeLayer(routeLayer);routeLayer=null;document.getElementById('route-info').style.display='none';document.getElementById('risk-warn').style.display='none';document.getElementById('from-inp').value='';document.getElementById('to-inp').value='';}
+function renderNearby(type){const el=document.getElementById('nearby-list');el.innerHTML='';const c=map.getCenter();const cat={hospital:'#e9456022',police:'#4477ff22',metro:'#9c27b022',restaurant:'#ff980022',hotel:'#00b4d822',atm:'#00c85322',pharmacy:'#e91e6322'};(type==='all'?NEARBY:NEARBY.filter(n=>n.type===type)).forEach(n=>{const d=distKm(c.lat,c.lng,n.lat,n.lng);const div=document.createElement('div');div.className='nearby-item';div.innerHTML=`<div class="nb-icon" style="background:${cat[n.type]||'#55555522'}">${n.icon}</div><div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:600;">${n.name}</div><div style="font-size:10px;color:#666;">${n.area} · ⭐${n.rating}</div></div><div style="font-size:10px;color:#888;white-space:nowrap;">${d.toFixed(1)}km</div>`;div.onclick=()=>{map.setView([n.lat,n.lng],15);L.marker([n.lat,n.lng]).addTo(map).bindPopup(`<b>${n.name}</b><br>${n.area}`).openPopup();showToast(n.name+' shown on map');};el.appendChild(div);});}
+function filterNearby(type,btn){document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderNearby(type);}
+function openDirectionsTo(){if(currentZone){document.getElementById('to-inp').value=currentZone.name;setTool('directions',document.getElementById('tb-directions'));}}
+function saveCurrentZone(){if(currentZone)showToast(currentZone.name+' saved!');}
+function askAIAboutZone(){if(currentZone)askQuick(`Tell me about safety in ${currentZone.name}, Chennai. Safety score is ${currentZone.score}/100 in ${currentZone.zone}.`);}
+function askAIZone(name){const z=ZONES.find(z=>z.name===name);if(z)askQuick(`Is ${z.name} safe? It has a safety score of ${z.score}/100 in ${z.zone}. Crime rate is ${z.crime}/10.`);}
+map.on('mousemove',e=>{document.getElementById('coords-bar').textContent=`${e.latlng.lat.toFixed(4)}°N ${e.latlng.lng.toFixed(4)}°E · Zoom ${map.getZoom()}`;});
+
+// AI CHAT
+function getTime(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function addMsg(text,isUser){const msgs=document.getElementById('chat-messages');const div=document.createElement('div');div.className=isUser?'msg-user':'msg-ai';div.innerHTML=text+(isUser?`<div class="msg-time">${getTime()}</div>`:'');msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;return div;}
+async function sendChat(){const inp=document.getElementById('chat-inp');const q=inp.value.trim();if(!q)return;inp.value='';addMsg(q,true);const thinking=addMsg('⏳ Thinking...',false);try{const res=await fetch('http://127.0.0.1:5000/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});const data=await res.json();thinking.innerHTML=data.answer;}catch(e){thinking.innerHTML='⚠️ Flask not running! Start: <code>python backend/app.py</code>';}document.getElementById('chat-messages').scrollTop=99999;}
+function askQuick(q){document.getElementById('chat-inp').value=q;sendChat();}
+function openShare(){document.getElementById('share-modal').classList.add('show');}
+function closeShare(){document.getElementById('share-modal').classList.remove('show');}
+function copyLink(){const c=map.getCenter();navigator.clipboard.writeText(`Chennai Safety Map · ${c.lat.toFixed(4)}°N ${c.lng.toFixed(4)}°E`).catch(()=>{});showToast('Link copied!');}
+function distKm(la1,lo1,la2,lo2){const R=6371,dL=(la2-la1)*Math.PI/180,dN=(lo2-lo1)*Math.PI/180;const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+</script>
+</body>
+</html>
