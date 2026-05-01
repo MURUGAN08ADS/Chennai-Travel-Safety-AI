@@ -1,0 +1,9 @@
+# Secrets and local environment files
+.env
+**/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/

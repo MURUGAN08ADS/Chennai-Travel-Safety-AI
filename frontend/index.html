@@ -87,7 +87,12 @@ nav{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12p
 .chat-header-icon{width:36px;height:36px;background:rgba(233,69,96,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;}
 .chat-header h3{font-size:14px;font-weight:700;}
 .chat-header p{font-size:11px;color:#666;margin-top:1px;}
-.online-dot{width:8px;height:8px;border-radius:50%;background:#00c853;margin-left:auto;flex-shrink:0;animation:pulse 2s infinite;}
+.chat-header-actions{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.lang-select{background:#0f0f1a;border:1px solid #333;color:#ddd;border-radius:7px;padding:4px 8px;font-size:11px;outline:none;}
+.lang-select:focus{border-color:#e94560;}
+.sos-btn{padding:5px 10px;border-radius:14px;border:1px solid #e94560;background:rgba(233,69,96,0.12);color:#ff728a;font-size:10px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.sos-btn:hover{background:#e94560;color:#fff;}
+.online-dot{width:8px;height:8px;border-radius:50%;background:#00c853;flex-shrink:0;animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
 .chat-messages::-webkit-scrollbar{width:3px;}
@@ -144,6 +149,7 @@ nav{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12p
       <div class="tb-tab active" id="tb-explore" onclick="setTool('explore',this)"><i class="fas fa-map-marker-alt"></i> Explore</div>
       <div class="tb-tab" id="tb-directions" onclick="setTool('directions',this)"><i class="fas fa-route"></i> Directions</div>
       <div class="tb-tab" id="tb-nearby" onclick="setTool('nearby',this)"><i class="fas fa-compass"></i> Nearby</div>
+      <div class="tb-tab" onclick="openChennaiBus()"><i class="fas fa-bus"></i> Live Buses</div>
       <div class="tb-sep"></div>
       <div class="layer-btn active" onclick="setLayer('standard',this)">🗺️ Map</div>
       <div class="layer-btn" onclick="setLayer('satellite',this)">🛰️ Satellite</div>
@@ -239,8 +245,16 @@ nav{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12p
   <div class="chat-panel">
     <div class="chat-header">
       <div class="chat-header-icon">🤖</div>
-      <div><h3>AI Travel Assistant</h3><p>Powered by LLaMA 3.3 via Groq</p></div>
-      <div class="online-dot" title="Online"></div>
+      <div><h3>AI Travel Assistant</h3><p>Powered by Gemini 2.5 Flash via OpenRouter</p></div>
+      <div class="chat-header-actions">
+        <select id="lang-select" class="lang-select" title="Assistant Language">
+          <option value="english" selected>EN</option>
+          <option value="tamil">தமிழ்</option>
+          <option value="hinglish">Hinglish</option>
+        </select>
+        <button class="sos-btn" onclick="triggerSOS('manual_sos')" title="Emergency SOS">SOS</button>
+        <div class="online-dot" title="Online"></div>
+      </div>
     </div>
     <div class="chat-messages" id="chat-messages">
       <div class="msg-ai">👋 Hi! I'm your Chennai travel safety assistant.<br><br>Ask me about safe areas, travel tips, or click any zone on the map and I'll tell you more about it!</div>
@@ -253,6 +267,7 @@ nav{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12p
         <div class="quick-btn" onclick="askQuick('What areas to avoid in North Chennai?')">Avoid in North Chennai?</div>
         <div class="quick-btn" onclick="askQuick('Best time to travel in Chennai?')">Best travel time?</div>
         <div class="quick-btn" onclick="askQuick('Emergency contacts in Chennai?')">Emergency contacts?</div>
+        <div class="quick-btn" onclick="triggerSOS('quick_sos')">SOS help now</div>
       </div>
     </div>
     <div class="chat-input-area">
@@ -338,7 +353,10 @@ const NEARBY=[
 
 const COL={green:'#00c853',orange:'#ff9800',red:'#e94560'};
 const LBL={green:'✅ Safe Area',orange:'⚠️ Moderate Risk',red:'🔴 High Risk'};
+const API_BASE='http://127.0.0.1:5001';
 let map,tileLayer,circles=[],boundary,routeLayer,myMark,measuring=false,mPoints=[],mLine=null,currentMode='driving',currentZone=null,zonesOn=true,boundOn=true;
+let lastKnownCoords=null,activeRouteCoords=[],lastDeviationAlertAt=0;
+const DEVIATION_THRESHOLD_KM=0.45,DEVIATION_ALERT_COOLDOWN_MS=45000;
 
 const TILES={standard:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',satellite:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',dark:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',terrain:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'};
 map=L.map('map',{zoomControl:false,attributionControl:false}).setView([13.0627,80.21],11);
@@ -361,15 +379,215 @@ function centerMap(){map.setView([13.0627,80.21],11);}
 function fitAll(){map.fitBounds(ZONES.map(z=>[z.lat,z.lng]),{padding:[40,40]});}
 function toggleZones(btn){zonesOn=!zonesOn;circles.forEach(c=>zonesOn?map.addLayer(c):map.removeLayer(c));btn.classList.toggle('on',zonesOn);showToast(zonesOn?'Zones visible':'Zones hidden');}
 function toggleBoundary(btn){boundOn=!boundOn;boundOn?map.addLayer(boundary):map.removeLayer(boundary);btn.classList.toggle('on',boundOn);showToast(boundOn?'Boundary visible':'Boundary hidden');}
-function getMyLoc(){if(!navigator.geolocation){showToast('Not supported');return;}showToast('Getting location...');navigator.geolocation.getCurrentPosition(p=>{const{latitude:la,longitude:lo}=p.coords;if(myMark)map.removeLayer(myMark);myMark=L.circleMarker([la,lo],{radius:8,color:'#4285f4',fillColor:'#4285f4',fillOpacity:1,weight:3}).addTo(map).bindPopup('<b>You are here</b>').openPopup();L.circle([la,lo],{radius:150,color:'#4285f4',fillColor:'#4285f4',fillOpacity:0.1,weight:1}).addTo(map);map.setView([la,lo],14);showToast('Location found!');},()=>showToast('Could not get location'));}
+// function getMyLoc(){if(!navigator.geolocation){showToast('Not supported');return;}showToast('Getting location...');navigator.geolocation.getCurrentPosition(p=>{const{latitude:la,longitude:lo}=p.coords;if(myMark)map.removeLayer(myMark);myMark=L.circleMarker([la,lo],{radius:8,color:'#4285f4',fillColor:'#4285f4',fillOpacity:1,weight:3}).addTo(map).bindPopup('<b>You are here</b>').openPopup();L.circle([la,lo],{radius:150,color:'#4285f4',fillColor:'#4285f4',fillOpacity:0.1,weight:1}).addTo(map);map.setView([la,lo],14);showToast('Location found!');},()=>showToast('Could not get location'));}
+let watchId = null;
+let accuracyCircle = null;
+let trackingOn = false;
+
+function getMyLoc() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported'); return; }
+
+  if (trackingOn) {
+    // Stop tracking
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    trackingOn = false;
+    if (myMark) { map.removeLayer(myMark); myMark = null; }
+    if (accuracyCircle) { map.removeLayer(accuracyCircle); accuracyCircle = null; }
+    lastKnownCoords = null;
+    showToast('Live tracking stopped');
+    return;
+  }
+
+  // Start live tracking
+  trackingOn = true;
+  showToast('Live tracking started...');
+
+  watchId = navigator.geolocation.watchPosition(
+    p => {
+      const { latitude: la, longitude: lo, accuracy: acc } = p.coords;
+      lastKnownCoords = {lat:la,lng:lo,accuracy_m:Math.round(acc),timestamp:Date.now()};
+
+      // Remove old markers
+      if (myMark) map.removeLayer(myMark);
+      if (accuracyCircle) map.removeLayer(accuracyCircle);
+
+      // Blue dot (your location)
+      myMark = L.circleMarker([la, lo], {
+        radius: 10,
+        color: '#fff',
+        fillColor: '#4285f4',
+        fillOpacity: 1,
+        weight: 3
+      }).addTo(map).bindPopup(`<b>You are here</b><br>Accuracy: ${Math.round(acc)}m`);
+
+      // Accuracy circle
+      accuracyCircle = L.circle([la, lo], {
+        radius: acc,
+        color: '#4285f4',
+        fillColor: '#4285f4',
+        fillOpacity: 0.08,
+        weight: 1
+      }).addTo(map);
+
+      // Follow the user on map
+      map.setView([la, lo], map.getZoom());
+      checkRouteDeviation();
+
+      // Update from field in directions if empty
+      const fromInp = document.getElementById('from-inp');
+      if (!fromInp.value) fromInp.value = `${la.toFixed(4)}, ${lo.toFixed(4)}`;
+    },
+    err => { showToast('Location error: ' + err.message); trackingOn = false; },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+}
 function openStreetView(){const c=map.getCenter();window.open(`https://www.google.com/maps?q=&layer=c&cbll=${c.lat},${c.lng}`,'_blank');}
 function toggleHeat(btn){btn.classList.toggle('on');if(btn.classList.contains('on')){ZONES.filter(z=>z.safety==='red').forEach(z=>{L.circle([z.lat,z.lng],{color:'transparent',fillColor:'#e94560',fillOpacity:0.12,radius:z.r*1.8,weight:0}).addTo(map);});showToast('Heatmap ON');}else showToast('Reload to remove heatmap');}
 function startMeasure(btn){measuring=!measuring;btn.classList.toggle('on',measuring);if(measuring){mPoints=[];if(mLine)map.removeLayer(mLine);showToast('Click 2 points to measure');map.on('click',onMeasure);}else{map.off('click',onMeasure);if(mLine)map.removeLayer(mLine);document.getElementById('measure-bar').style.display='none';showToast('Measure off');}}
 function onMeasure(e){mPoints.push([e.latlng.lat,e.latlng.lng]);if(mPoints.length===2){if(mLine)map.removeLayer(mLine);mLine=L.polyline(mPoints,{color:'#fff',weight:2,dashArray:'4,4'}).addTo(map);const d=distKm(...mPoints[0],...mPoints[1]);const el=document.getElementById('measure-bar');el.textContent=`Distance: ${d.toFixed(2)} km`;el.style.display='block';mPoints=[];}}
 function setMode(mode,btn){currentMode=mode;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 function swapLocs(){const f=document.getElementById('from-inp').value;document.getElementById('from-inp').value=document.getElementById('to-inp').value;document.getElementById('to-inp').value=f;}
-function getRoute(){const f=document.getElementById('from-inp').value.toLowerCase();const t=document.getElementById('to-inp').value.toLowerCase();if(!f||!t){showToast('Enter From and To');return;}const fz=ZONES.find(z=>z.name.toLowerCase().includes(f));const tz=ZONES.find(z=>z.name.toLowerCase().includes(t));if(!fz){showToast('From not found');return;}if(!tz){showToast('To not found');return;}if(routeLayer)map.removeLayer(routeLayer);const spd={driving:35,transit:22,walking:5,bicycling:13,motorcycle:40};const ico={driving:'🚗',transit:'🚌',walking:'🚶',bicycling:'🚲',motorcycle:'🏍️'};const mcol={driving:'#e94560',transit:'#00b4d8',walking:'#00c853',bicycling:'#ff9800',motorcycle:'#9c27b0'};const col=mcol[currentMode];routeLayer=L.polyline([[fz.lat,fz.lng],[tz.lat,tz.lng]],{color:col,weight:5,dashArray:currentMode==='walking'?'8,8':null,opacity:0.85}).addTo(map);map.fitBounds(routeLayer.getBounds(),{padding:[60,60]});const d=distKm(fz.lat,fz.lng,tz.lat,tz.lng);const mins=Math.round((d/spd[currentMode])*60);const avg=Math.round((fz.score+tz.score)/2);const sc=avg>70?'#00c853':avg>40?'#ff9800':'#e94560';document.getElementById('risk-warn').style.display=(fz.safety==='red'||tz.safety==='red')?'block':'none';document.getElementById('r-dist').textContent=d.toFixed(1)+' km';document.getElementById('r-time').textContent=mins<60?mins+' min':Math.floor(mins/60)+'h '+(mins%60)+'m';document.getElementById('r-safe').innerHTML=`<span style="color:${sc}">${avg}</span>`;document.getElementById('route-steps').innerHTML=`<div class="route-step"><div class="step-ic" style="background:#00c85322;color:#00c853">A</div><b>${fz.name}</b> · ${fz.score}/100</div><div class="route-step"><div class="step-ic" style="background:${col}22;color:${col}">${ico[currentMode]}</div>${d.toFixed(1)} km · ~${mins} min</div><div class="route-step"><div class="step-ic" style="background:#e9456022;color:#e94560">B</div><b>${tz.name}</b> · ${tz.score}/100</div>`;document.getElementById('route-info').style.display='block';L.marker([fz.lat,fz.lng]).addTo(map).bindPopup(`<b>Start: ${fz.name}</b>`).openPopup();L.marker([tz.lat,tz.lng]).addTo(map).bindPopup(`<b>End: ${tz.name}</b>`);}
-function clearRoute(){if(routeLayer)map.removeLayer(routeLayer);routeLayer=null;document.getElementById('route-info').style.display='none';document.getElementById('risk-warn').style.display='none';document.getElementById('from-inp').value='';document.getElementById('to-inp').value='';}
+// function getRoute(){const f=document.getElementById('from-inp').value.toLowerCase();const t=document.getElementById('to-inp').value.toLowerCase();if(!f||!t){showToast('Enter From and To');return;}const fz=ZONES.find(z=>z.name.toLowerCase().includes(f));const tz=ZONES.find(z=>z.name.toLowerCase().includes(t));if(!fz){showToast('From not found');return;}if(!tz){showToast('To not found');return;}if(routeLayer)map.removeLayer(routeLayer);const spd={driving:35,transit:22,walking:5,bicycling:13,motorcycle:40};const ico={driving:'🚗',transit:'🚌',walking:'🚶',bicycling:'🚲',motorcycle:'🏍️'};const mcol={driving:'#e94560',transit:'#00b4d8',walking:'#00c853',bicycling:'#ff9800',motorcycle:'#9c27b0'};const col=mcol[currentMode];routeLayer=L.polyline([[fz.lat,fz.lng],[tz.lat,tz.lng]],{color:col,weight:5,dashArray:currentMode==='walking'?'8,8':null,opacity:0.85}).addTo(map);map.fitBounds(routeLayer.getBounds(),{padding:[60,60]});const d=distKm(fz.lat,fz.lng,tz.lat,tz.lng);const mins=Math.round((d/spd[currentMode])*60);const avg=Math.round((fz.score+tz.score)/2);const sc=avg>70?'#00c853':avg>40?'#ff9800':'#e94560';document.getElementById('risk-warn').style.display=(fz.safety==='red'||tz.safety==='red')?'block':'none';document.getElementById('r-dist').textContent=d.toFixed(1)+' km';document.getElementById('r-time').textContent=mins<60?mins+' min':Math.floor(mins/60)+'h '+(mins%60)+'m';document.getElementById('r-safe').innerHTML=`<span style="color:${sc}">${avg}</span>`;document.getElementById('route-steps').innerHTML=`<div class="route-step"><div class="step-ic" style="background:#00c85322;color:#00c853">A</div><b>${fz.name}</b> · ${fz.score}/100</div><div class="route-step"><div class="step-ic" style="background:${col}22;color:${col}">${ico[currentMode]}</div>${d.toFixed(1)} km · ~${mins} min</div><div class="route-step"><div class="step-ic" style="background:#e9456022;color:#e94560">B</div><b>${tz.name}</b> · ${tz.score}/100</div>`;document.getElementById('route-info').style.display='block';L.marker([fz.lat,fz.lng]).addTo(map).bindPopup(`<b>Start: ${fz.name}</b>`).openPopup();L.marker([tz.lat,tz.lng]).addTo(map).bindPopup(`<b>End: ${tz.name}</b>`);}
+async function getRoute() {
+  const f = document.getElementById('from-inp').value.trim().toLowerCase();
+  const t = document.getElementById('to-inp').value.trim().toLowerCase();
+  if (!f || !t) { showToast('Enter From and To'); return; }
+
+  const fz = ZONES.find(z => z.name.toLowerCase().includes(f));
+  const tz = ZONES.find(z => z.name.toLowerCase().includes(t));
+  if (!fz) { showToast('From area not found'); return; }
+  if (!tz) { showToast('To area not found'); return; }
+
+  if (routeLayer) map.removeLayer(routeLayer);
+
+  // Show loading
+  document.getElementById('route-info').style.display = 'block';
+  document.getElementById('route-steps').innerHTML = '<div style="color:#888;font-size:12px;padding:8px;">⏳ Finding best route...</div>';
+
+  // OSRM profile based on mode
+  const profiles = {
+    driving: 'driving',
+    motorcycle: 'driving',
+    bicycling: 'bike',
+    walking: 'foot',
+    transit: 'driving'
+  };
+  const profile = profiles[currentMode] || 'driving';
+
+  const mcol = { driving:'#e94560', transit:'#00b4d8', walking:'#00c853', bicycling:'#ff9800', motorcycle:'#9c27b0' };
+  const ico = { driving:'🚗', transit:'🚌', walking:'🚶', bicycling:'🚲', motorcycle:'🏍️' };
+  const col = mcol[currentMode];
+
+  try {
+    // Call OSRM free routing API
+    const url = `https://router.project-osrm.org/route/v1/${profile}/${fz.lng},${fz.lat};${tz.lng},${tz.lat}?overview=full&geometries=geojson&steps=true`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.code !== 'Ok' || !data.routes.length) {
+      showToast('Route not found, showing straight line');
+      drawStraightRoute(fz, tz, col);
+      return;
+    }
+
+    const route = data.routes[0];
+    const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+    activeRouteCoords = coords;
+    const dist = (route.distance / 1000).toFixed(1);
+    const secs = route.duration;
+    const mins = Math.round(secs / 60);
+
+    // Draw real road path
+    routeLayer = L.polyline(coords, {
+      color: col,
+      weight: 5,
+      opacity: 0.85,
+      dashArray: currentMode === 'walking' ? '8,8' : null
+    }).addTo(map);
+
+    map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+
+    // Start/End markers
+    L.marker([fz.lat, fz.lng]).addTo(map).bindPopup(`<b>Start: ${fz.name}</b>`).openPopup();
+    L.marker([tz.lat, tz.lng]).addTo(map).bindPopup(`<b>End: ${tz.name}</b>`);
+
+    // Safety
+    const avg = Math.round((fz.score + tz.score) / 2);
+    const sc = avg > 70 ? '#00c853' : avg > 40 ? '#ff9800' : '#e94560';
+
+    document.getElementById('risk-warn').style.display = (fz.safety === 'red' || tz.safety === 'red') ? 'block' : 'none';
+    document.getElementById('r-dist').textContent = dist + ' km';
+    document.getElementById('r-time').textContent = mins < 60 ? mins + ' min' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+    document.getElementById('r-safe').innerHTML = `<span style="color:${sc}">${avg}</span>`;
+
+    // Turn-by-turn steps
+    const steps = route.legs[0].steps;
+    let stepsHTML = `
+      <div class="route-step">
+        <div class="step-ic" style="background:#00c85322;color:#00c853">A</div>
+        <div><b>Start at ${fz.name}</b> · Safety ${fz.score}/100</div>
+      </div>`;
+
+    steps.slice(0, 8).forEach(step => {
+      if (!step.maneuver || step.distance < 50) return;
+      const d = step.distance > 1000
+        ? (step.distance / 1000).toFixed(1) + ' km'
+        : Math.round(step.distance) + ' m';
+      const dirIcon = getManeuverIcon(step.maneuver.type, step.maneuver.modifier);
+      const streetName = step.name || 'Continue';
+      stepsHTML += `
+        <div class="route-step">
+          <div class="step-ic" style="background:${col}22;color:${col}">${dirIcon}</div>
+          <div style="flex:1"><b>${streetName}</b><br><span style="font-size:10px;color:#888;">${d} · ${step.maneuver.type}</span></div>
+        </div>`;
+    });
+
+    stepsHTML += `
+      <div class="route-step">
+        <div class="step-ic" style="background:#e9456022;color:#e94560">B</div>
+        <div><b>Arrive at ${tz.name}</b> · Safety ${tz.score}/100</div>
+      </div>`;
+
+    document.getElementById('route-steps').innerHTML = stepsHTML;
+
+  } catch (err) {
+    showToast('Network error — showing straight line route');
+    drawStraightRoute(fz, tz, col);
+  }
+}
+
+function drawStraightRoute(fz, tz, col) {
+  activeRouteCoords = [[fz.lat, fz.lng], [tz.lat, tz.lng]];
+  routeLayer = L.polyline([[fz.lat, fz.lng], [tz.lat, tz.lng]], {
+    color: col, weight: 4, dashArray: '8,6', opacity: 0.7
+  }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+  const d = distKm(fz.lat, fz.lng, tz.lat, tz.lng);
+  const mins = Math.round(d / 35 * 60);
+  document.getElementById('r-dist').textContent = d.toFixed(1) + ' km';
+  document.getElementById('r-time').textContent = mins + ' min (approx)';
+  document.getElementById('route-steps').innerHTML = '<div style="color:#888;font-size:11px;padding:4px;">Straight line route shown — enable internet for real roads</div>';
+}
+
+function getManeuverIcon(type, modifier) {
+  if (type === 'turn') {
+    if (modifier === 'left' || modifier === 'sharp left') return '↰';
+    if (modifier === 'right' || modifier === 'sharp right') return '↱';
+    if (modifier === 'slight left') return '↖';
+    if (modifier === 'slight right') return '↗';
+    return '⬆';
+  }
+  if (type === 'roundabout' || type === 'rotary') return '🔄';
+  if (type === 'merge') return '⬆';
+  if (type === 'fork') return '⬆';
+  if (type === 'arrive') return '📍';
+  if (type === 'depart') return '🚀';
+  if (type === 'u-turn') return '↩';
+  return '⬆';
+}
+
+function clearRoute(){if(routeLayer)map.removeLayer(routeLayer);routeLayer=null;activeRouteCoords=[];document.getElementById('route-info').style.display='none';document.getElementById('risk-warn').style.display='none';document.getElementById('from-inp').value='';document.getElementById('to-inp').value='';}
 function renderNearby(type){const el=document.getElementById('nearby-list');el.innerHTML='';const c=map.getCenter();const cat={hospital:'#e9456022',police:'#4477ff22',metro:'#9c27b022',restaurant:'#ff980022',hotel:'#00b4d822',atm:'#00c85322',pharmacy:'#e91e6322'};(type==='all'?NEARBY:NEARBY.filter(n=>n.type===type)).forEach(n=>{const d=distKm(c.lat,c.lng,n.lat,n.lng);const div=document.createElement('div');div.className='nearby-item';div.innerHTML=`<div class="nb-icon" style="background:${cat[n.type]||'#55555522'}">${n.icon}</div><div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:600;">${n.name}</div><div style="font-size:10px;color:#666;">${n.area} · ⭐${n.rating}</div></div><div style="font-size:10px;color:#888;white-space:nowrap;">${d.toFixed(1)}km</div>`;div.onclick=()=>{map.setView([n.lat,n.lng],15);L.marker([n.lat,n.lng]).addTo(map).bindPopup(`<b>${n.name}</b><br>${n.area}`).openPopup();showToast(n.name+' shown on map');};el.appendChild(div);});}
 function filterNearby(type,btn){document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderNearby(type);}
 function openDirectionsTo(){if(currentZone){document.getElementById('to-inp').value=currentZone.name;setTool('directions',document.getElementById('tb-directions'));}}
@@ -381,12 +599,27 @@ map.on('mousemove',e=>{document.getElementById('coords-bar').textContent=`${e.la
 // AI CHAT
 function getTime(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 function addMsg(text,isUser){const msgs=document.getElementById('chat-messages');const div=document.createElement('div');div.className=isUser?'msg-user':'msg-ai';div.innerHTML=text+(isUser?`<div class="msg-time">${getTime()}</div>`:'');msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;return div;}
-async function sendChat(){const inp=document.getElementById('chat-inp');const q=inp.value.trim();if(!q)return;inp.value='';addMsg(q,true);const thinking=addMsg('⏳ Thinking...',false);try{const res=await fetch('http://127.0.0.1:5000/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});const data=await res.json();thinking.innerHTML=data.answer;}catch(e){thinking.innerHTML='⚠️ Flask not running! Start: <code>python backend/app.py</code>';}document.getElementById('chat-messages').scrollTop=99999;}
+function getPreferredLanguage(){const sel=document.getElementById('lang-select');return sel?sel.value:'english';}
+function isDistressMessage(text){const q=text.toLowerCase();return ['help','emergency','i feel unsafe','unsafe now','danger','attacked','robbed','sos'].some(k=>q.includes(k));}
+function getTrafficLevel(){const h=new Date().getHours();if((h>=8&&h<=11)||(h>=17&&h<=21))return 'high';if((h>=6&&h<8)||(h>11&&h<17)||(h>21&&h<=23))return 'medium';return 'low';}
+function getCrowdDensity(){const h=new Date().getHours();if(h>=18&&h<=22)return 'high';if((h>=7&&h<=10)||(h>=12&&h<=17))return 'medium';return 'low';}
+function getCurrentLocationForContext(){if(lastKnownCoords)return{lat:lastKnownCoords.lat,lng:lastKnownCoords.lng,accuracy_m:lastKnownCoords.accuracy_m};const c=map.getCenter();return{lat:Number(c.lat.toFixed(6)),lng:Number(c.lng.toFixed(6)),accuracy_m:null};}
+function nearestZoneFromCoords(lat,lng){let best=null,bestDist=Infinity;ZONES.forEach(z=>{const d=distKm(lat,lng,z.lat,z.lng);if(d<bestDist){bestDist=d;best=z;}});if(!best)return null;return {...best,distance_km:Number(bestDist.toFixed(2))};}
+function computeRouteDeviationKm(){if(!lastKnownCoords||!activeRouteCoords.length)return null;let minKm=Infinity;activeRouteCoords.forEach(([lat,lng])=>{const d=distKm(lastKnownCoords.lat,lastKnownCoords.lng,lat,lng);if(d<minKm)minKm=d;});return Number(minKm.toFixed(3));}
+function checkRouteDeviation(){const deviationKm=computeRouteDeviationKm();if(deviationKm===null||deviationKm<=DEVIATION_THRESHOLD_KM)return;const now=Date.now();if(now-lastDeviationAlertAt<DEVIATION_ALERT_COOLDOWN_MS)return;lastDeviationAlertAt=now;showToast('Route deviation detected. SOS context sent.');triggerSOS('route_deviation');}
+function buildRuntimeContext(){const location=getCurrentLocationForContext();const nearest=nearestZoneFromCoords(location.lat,location.lng);const zoneRef=currentZone||nearest;const c=map.getCenter();const h=new Date().getHours();const deviationKm=computeRouteDeviationKm();const timeRisk=(h>=22||h<5)?'high':(h>=19||h<7)?'medium':'low';return{gps:{lat:location.lat,lng:location.lng,accuracy_m:location.accuracy_m},map_center:{lat:Number(c.lat.toFixed(6)),lng:Number(c.lng.toFixed(6)),zoom:map.getZoom()},selected_zone:zoneRef?{name:zoneRef.name,zone:zoneRef.zone,safety:zoneRef.safety,score:zoneRef.score}:null,zone_safety:zoneRef?zoneRef.safety:null,crowd_density:getCrowdDensity(),traffic_level:getTrafficLevel(),time_of_day:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),time_risk:timeRisk,live_tracking:trackingOn,route_active:activeRouteCoords.length>0,route_mode:currentMode,route_deviation:deviationKm!==null?deviationKm>DEVIATION_THRESHOLD_KM:false,route_deviation_km:deviationKm,network_online:navigator.onLine,offline_mode:!navigator.onLine,language:getPreferredLanguage()};}
+async function triggerSOS(reason='manual_sos'){const loc=getCurrentLocationForContext();const payload={reason,language:getPreferredLanguage(),location:{lat:loc.lat,lng:loc.lng},context:buildRuntimeContext(),contacts:[]};try{const res=await fetch(`${API_BASE}/sos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok)throw new Error(data.error||'SOS failed');const police=data.nearest_police?`${data.nearest_police.name} (${data.nearest_police.distance_km} km)`:'Unavailable';const hospital=data.nearest_hospital?`${data.nearest_hospital.name} (${data.nearest_hospital.distance_km} km)`:'Unavailable';addMsg(`🚨 SOS triggered.<br>👮 Nearest police: ${police}<br>🏥 Nearest hospital: ${hospital}<br><br>${data.guidance||'Call emergency services now (India: 112).'}`,false);}catch(e){addMsg('⚠️ SOS request failed. Call emergency services now (India: 112).',false);}}
+async function sendChat(){const inp=document.getElementById('chat-inp');const q=inp.value.trim();if(!q)return;inp.value='';addMsg(q,true);const thinking=addMsg('⏳ Thinking...',false);if(isDistressMessage(q))triggerSOS('user_distress');try{const res=await fetch(`${API_BASE}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,language:getPreferredLanguage(),context:buildRuntimeContext()})});const data=await res.json();thinking.innerHTML=data.answer||'No response available.';}catch(e){thinking.innerHTML='⚠️ Flask not running! Start: <code>python backend/app.py</code>';}document.getElementById('chat-messages').scrollTop=99999;}
 function askQuick(q){document.getElementById('chat-inp').value=q;sendChat();}
+const languageSelector=document.getElementById('lang-select');if(languageSelector){languageSelector.addEventListener('change',e=>{const label=e.target.options[e.target.selectedIndex].text;showToast(`AI language set to ${label}`);});}
 function openShare(){document.getElementById('share-modal').classList.add('show');}
 function closeShare(){document.getElementById('share-modal').classList.remove('show');}
 function copyLink(){const c=map.getCenter();navigator.clipboard.writeText(`Chennai Safety Map · ${c.lat.toFixed(4)}°N ${c.lng.toFixed(4)}°E`).catch(()=>{});showToast('Link copied!');}
 function distKm(la1,lo1,la2,lo2){const R=6371,dL=(la2-la1)*Math.PI/180,dN=(lo2-lo1)*Math.PI/180;const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+function openChennaiBus() {
+  window.open('https://chalo.com/chennai', '_blank');
+  showToast('Opening Chennai live bus tracker...');
+}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 </script>
 </body>
